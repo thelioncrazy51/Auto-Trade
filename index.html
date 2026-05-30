@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EMA Cross Auto Trader — BingX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════ RESET & VARS ════════════════════════════ */
+:root {
+  --bg:     #08090c;
+  --bg1:    #0e1018;
+  --bg2:    #141720;
+  --bg3:    #1c2030;
+  --bg4:    #222840;
+  --border: rgba(255,255,255,0.07);
+  --green:  #00e676;
+  --green-d:rgba(0,230,118,0.1);
+  --green-b:rgba(0,230,118,0.28);
+  --red:    #ff4d6d;
+  --red-d:  rgba(255,77,109,0.1);
+  --red-b:  rgba(255,77,109,0.28);
+  --blue:   #3d7eff;
+  --blue-d: rgba(61,126,255,0.12);
+  --amber:  #ffb300;
+  --amber-d:rgba(255,179,0,0.1);
+  --amber-b:rgba(255,179,0,0.28);
+  --orange: #ff6d00;
+  --muted:  #5a6480;
+  --text:   #dde2f0;
+  --text2:  #a0aac0;
+  --mono:   'Space Mono', monospace;
+  --ui:     'Syne', sans-serif;
+}
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; overflow:hidden; background:var(--bg); color:var(--text); font-family:var(--ui); }
+body { display:flex; flex-direction:column; }
+
+/* ═══════════════════════════ TOP BAR ════════════════════════════════ */
+.topbar {
+  height:50px; flex-shrink:0;
+  display:flex; align-items:center; gap:10px; padding:0 14px;
+  background:var(--bg1); border-bottom:1px solid var(--border);
+}
+.logo { font-size:15px; font-weight:800; letter-spacing:-.5px; margin-right:2px; white-space:nowrap; }
+.logo em { color:var(--green); font-style:normal; }
+.sep { width:1px; height:20px; background:var(--border); flex-shrink:0; }
+select {
+  background:var(--bg2); border:1px solid var(--border); color:var(--text);
+  font-family:var(--ui); font-size:12px; font-weight:600;
+  padding:5px 8px; border-radius:6px; cursor:pointer; outline:none;
+}
+select:focus { border-color:var(--blue); }
+.conn-dot { width:7px; height:7px; border-radius:50%; background:var(--muted); flex-shrink:0; transition:.3s; }
+.conn-dot.live { background:var(--green); box-shadow:0 0 8px var(--green); animation:blink 2s infinite; }
+@keyframes blink { 0%,100%{opacity:1}50%{opacity:.45} }
+.conn-text { font-family:var(--mono); font-size:10px; color:var(--muted); white-space:nowrap; }
+.price-wrap { margin-left:auto; text-align:right; line-height:1.2; }
+.price-main { font-family:var(--mono); font-size:19px; font-weight:700; transition:color .2s; }
+.price-chg  { font-family:var(--mono); font-size:10px; }
+.up  { color:var(--green); } .dn { color:var(--red); } .flat { color:var(--muted); }
+.btn {
+  border:none; border-radius:6px; cursor:pointer;
+  font-family:var(--ui); font-size:12px; font-weight:600;
+  padding:6px 12px; transition:.15s; white-space:nowrap; flex-shrink:0;
+}
+.btn-gear   { background:var(--bg2); border:1px solid var(--border); color:var(--muted); }
+.btn-gear:hover { color:var(--text); border-color:rgba(255,255,255,.2); }
+.btn-save   { background:var(--blue); color:#fff; }
+.btn-save:hover { opacity:.85; }
+.btn-cancel { background:var(--bg2); border:1px solid var(--border); color:var(--muted); }
+.btn-cancel:hover { color:var(--text); }
+
+/* ═══════════════════════════ LAYOUT ═════════════════════════════════ */
+.body-wrap { display:flex; flex:1; overflow:hidden; }
+.chart-wrap { flex:1; position:relative; min-width:0; }
+#chart { width:100%; height:100%; }
+
+.chart-legend {
+  position:absolute; top:8px; left:8px; z-index:5;
+  display:flex; gap:6px; pointer-events:none;
+}
+.cl-badge {
+  background:rgba(8,9,12,.85); backdrop-filter:blur(6px);
+  border:1px solid var(--border); border-radius:5px;
+  padding:3px 9px; font-family:var(--mono); font-size:10px;
+  display:flex; align-items:center; gap:5px;
+}
+.cl-dot { width:6px; height:6px; border-radius:50%; }
+
+/* ═══════════════════════════ SIDEBAR ════════════════════════════════ */
+.sidebar {
+  width:262px; flex-shrink:0;
+  background:var(--bg1); border-left:1px solid var(--border);
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.sb { padding:12px 14px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.sb:last-child { border-bottom:none; }
+.sb-ttl {
+  font-size:9px; font-weight:700; letter-spacing:1.8px;
+  text-transform:uppercase; color:var(--muted); margin-bottom:9px;
+}
+
+/* toggle */
+.at-row { display:flex; align-items:center; justify-content:space-between; }
+.at-lbl { font-size:13px; font-weight:700; }
+.at-sub { font-size:10px; color:var(--muted); margin-top:2px; }
+.tgl { position:relative; width:42px; height:22px; flex-shrink:0; }
+.tgl input { opacity:0; width:0; height:0; position:absolute; }
+.tgl-track {
+  position:absolute; inset:0; border-radius:11px;
+  background:var(--bg3); border:1px solid var(--border); cursor:pointer; transition:.2s;
+}
+.tgl-thumb {
+  position:absolute; width:16px; height:16px; top:2px; left:2px;
+  border-radius:50%; background:var(--muted); pointer-events:none; transition:.2s;
+}
+.tgl input:checked ~ .tgl-track { background:var(--green-d); border-color:var(--green-b); }
+.tgl input:checked ~ .tgl-thumb { transform:translateX(20px); background:var(--green); }
+
+/* signals */
+.sig-grid { display:flex; flex-direction:column; gap:4px; }
+.sig-row {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:6px 8px; background:var(--bg2); border-radius:6px;
+  border:1px solid var(--border); transition:border-color .25s;
+}
+.sig-row.active-buy  { border-color:var(--green-b); background:var(--green-d); }
+.sig-row.active-sell { border-color:var(--red-b);   background:var(--red-d);   }
+.sig-row.active-cls  { border-color:var(--amber-b); background:var(--amber-d); }
+.sig-name { font-size:11px; font-weight:600; }
+.sig-pill {
+  font-family:var(--mono); font-size:9px; font-weight:700;
+  padding:2px 6px; border-radius:4px;
+  background:var(--bg3); color:var(--muted); border:1px solid var(--border);
+  transition:.25s;
+}
+.sig-pill.on-buy  { background:var(--green-d); color:var(--green); border-color:var(--green-b); }
+.sig-pill.on-sell { background:var(--red-d);   color:var(--red);   border-color:var(--red-b);   }
+.sig-pill.on-cls  { background:var(--amber-d); color:var(--amber); border-color:var(--amber-b); }
+
+/* stats */
+.stat-grid { display:grid; grid-template-columns:1fr auto; gap:3px 8px; }
+.stat-k { font-size:10px; color:var(--text2); }
+.stat-v { font-family:var(--mono); font-size:10px; font-weight:700; text-align:right; }
+.stat-v.g { color:var(--green); }
+.stat-v.r { color:var(--red); }
+.stat-v.a { color:var(--amber); }
+.stat-v.o { color:var(--orange); }
+.stat-v.b { color:var(--blue); }
+.stat-sep { grid-column:1/-1; height:1px; background:var(--border); margin:2px 0; }
+
+/* position */
+.pos-card {
+  background:var(--bg2); border-radius:8px; border:1px solid var(--border); padding:11px;
+}
+.pos-empty { color:var(--muted); text-align:center; padding:6px 0; font-size:12px; }
+.pos-hdr { display:flex; align-items:center; gap:8px; margin-bottom:9px; }
+.pos-badge {
+  font-family:var(--mono); font-size:10px; font-weight:700;
+  padding:2px 8px; border-radius:4px;
+}
+.pos-badge.long  { background:var(--green-d); color:var(--green); border:1px solid var(--green-b); }
+.pos-badge.short { background:var(--red-d);   color:var(--red);   border:1px solid var(--red-b);   }
+.pos-pair { font-weight:700; font-size:13px; }
+.pos-kv { display:flex; justify-content:space-between; margin-bottom:4px; font-size:11px; }
+.pos-k { color:var(--muted); }
+.pos-v { font-family:var(--mono); font-weight:600; }
+.pos-v.profit { color:var(--green); }
+.pos-v.loss   { color:var(--red);   }
+.btn-close-pos {
+  width:100%; margin-top:9px; padding:7px;
+  background:var(--red-d); border:1px solid var(--red-b);
+  color:var(--red); font-size:11px; border-radius:6px;
+}
+.btn-close-pos:hover { background:var(--red); color:#fff; border-color:var(--red); }
+
+/* log */
+.log-wrap { flex:1; overflow-y:auto; }
+.log-wrap::-webkit-scrollbar { width:3px; }
+.log-wrap::-webkit-scrollbar-thumb { background:var(--bg4); border-radius:2px; }
+.log-entry {
+  display:flex; gap:7px; padding:5px 14px;
+  border-bottom:1px solid rgba(255,255,255,.025);
+  font-family:var(--mono); font-size:10px; line-height:1.45;
+}
+.log-t { color:var(--muted); flex-shrink:0; }
+.log-m { word-break:break-all; }
+.log-m.buy   { color:var(--green); }
+.log-m.sell  { color:var(--red);   }
+.log-m.close { color:var(--amber); }
+.log-m.err   { color:#ff6b6b; }
+.log-m.ok    { color:var(--blue); }
+.log-m.sys   { color:var(--text2); }
+
+/* ═══════════════════════════ MODAL ══════════════════════════════════ */
+.modal-bg {
+  display:none; position:fixed; inset:0;
+  background:rgba(0,0,0,.78); backdrop-filter:blur(5px);
+  z-index:300; align-items:center; justify-content:center;
+}
+.modal-bg.open { display:flex; }
+.modal {
+  background:var(--bg1); border:1px solid var(--border);
+  border-radius:14px; width:520px; max-height:88vh;
+  overflow-y:auto; padding:26px;
+}
+.modal::-webkit-scrollbar { width:3px; }
+.modal::-webkit-scrollbar-thumb { background:var(--bg4); border-radius:2px; }
+.modal-title { font-size:18px; font-weight:800; margin-bottom:20px; }
+.mgrp { margin-bottom:20px; }
+.mgrp-hdr {
+  font-size:9px; font-weight:700; letter-spacing:1.8px;
+  text-transform:uppercase; color:var(--muted);
+  padding-bottom:7px; margin-bottom:11px; border-bottom:1px solid var(--border);
+}
+.mrow { display:flex; flex-direction:column; gap:4px; margin-bottom:8px; }
+.mrow label { font-size:11px; color:var(--text2); }
+.minput {
+  background:var(--bg2); border:1px solid var(--border); color:var(--text);
+  font-family:var(--mono); font-size:12px;
+  padding:8px 11px; border-radius:7px; outline:none; width:100%;
+}
+.minput:focus { border-color:var(--blue); }
+.minput::placeholder { color:var(--muted); opacity:.55; }
+.mrow-2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px; }
+.info-box {
+  background:var(--blue-d); border:1px solid rgba(61,126,255,.22);
+  border-radius:7px; padding:10px 12px;
+  font-size:11px; color:rgba(221,226,240,.72); line-height:1.65; margin-bottom:10px;
+}
+.info-box a { color:var(--blue); }
+.info-box code { font-family:var(--mono); color:var(--blue); font-size:10px; background:rgba(61,126,255,.15); padding:1px 4px; border-radius:3px; }
+.warn-box {
+  background:var(--amber-d); border:1px solid var(--amber-b);
+  border-radius:7px; padding:10px 12px;
+  font-size:11px; color:rgba(255,179,0,.9); line-height:1.65;
+}
+.warn-box code { font-family:var(--mono); font-size:10px; }
+.modal-footer { display:flex; gap:8px; justify-content:flex-end; margin-top:20px; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════ TOP BAR ══════════════════════════════════ -->
+<div class="topbar">
+  <div class="logo">EMA<em>Cross</em>Bot</div>
+
+  <select id="symSel" onchange="resetAndReload()">
+    <option value="BTC-USDT">BTC-USDT</option>
+    <option value="ETH-USDT">ETH-USDT</option>
+    <option value="SOL-USDT">SOL-USDT</option>
+    <option value="BNB-USDT">BNB-USDT</option>
+    <option value="XRP-USDT">XRP-USDT</option>
+    <option value="DOGE-USDT">DOGE-USDT</option>
+    <option value="ADA-USDT">ADA-USDT</option>
+  </select>
+
+  <select id="tfSel" onchange="resetAndReload()">
+    <option value="1m">1m</option>
+    <option value="3m">3m</option>
+    <option value="5m">5m</option>
+    <option value="15m" selected>15m</option>
+    <option value="30m">30m</option>
+    <option value="1h">1h</option>
+    <option value="4h">4h</option>
+    <option value="1d">1d</option>
+  </select>
+
+  <div class="sep"></div>
+  <div class="conn-dot" id="dot"></div>
+  <span class="conn-text" id="connText">Menghubungkan…</span>
+
+  <div class="price-wrap">
+    <div class="price-main flat" id="priceEl">—</div>
+    <div class="price-chg flat"  id="chgEl">—</div>
+  </div>
+
+  <button class="btn btn-gear" onclick="openSettings()">⚙ Pengaturan</button>
+</div>
+
+<!-- ═══════════════════════ BODY ═════════════════════════════════════ -->
+<div class="body-wrap">
+
+  <!-- CHART -->
+  <div class="chart-wrap">
+    <div id="chart"></div>
+    <div class="chart-legend">
+      <div class="cl-badge">
+        <div class="cl-dot" style="background:#4080ff"></div>
+        <span id="legFast">EMA 50</span>
+      </div>
+      <div class="cl-badge">
+        <div class="cl-dot" style="background:#ffb300"></div>
+        <span id="legSlow">EMA 200</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <!-- AUTO TRADING -->
+    <div class="sb">
+      <div class="sb-ttl">Auto Trading</div>
+      <div class="at-row">
+        <div>
+          <div class="at-lbl">Trading Otomatis</div>
+          <div class="at-sub" id="atSub">Nonaktif — sinyal hanya ditampilkan</div>
+        </div>
+        <label class="tgl">
+          <input type="checkbox" id="atToggle" onchange="toggleAT()">
+          <div class="tgl-track"></div>
+          <div class="tgl-thumb"></div>
+        </label>
+      </div>
+    </div>
+
+    <!-- SIGNALS -->
+    <div class="sb">
+      <div class="sb-ttl">Status Sinyal</div>
+      <div class="sig-grid">
+        <div class="sig-row" id="row-buy">
+          <span class="sig-name">🟢 Sinyal Beli (Open Long)</span>
+          <span class="sig-pill" id="pill-buy">WAIT</span>
+        </div>
+        <div class="sig-row" id="row-cbuy">
+          <span class="sig-name">⬜ Tutup Beli (Close Long)</span>
+          <span class="sig-pill" id="pill-cbuy">WAIT</span>
+        </div>
+        <div class="sig-row" id="row-sell">
+          <span class="sig-name">🔴 Sinyal Jual (Open Short)</span>
+          <span class="sig-pill" id="pill-sell">WAIT</span>
+        </div>
+        <div class="sig-row" id="row-csell">
+          <span class="sig-name">⬜ Tutup Jual (Close Short)</span>
+          <span class="sig-pill" id="pill-csell">WAIT</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATISTICS -->
+    <div class="sb">
+      <div class="sb-ttl">Statistik Sesi</div>
+      <div class="stat-grid">
+        <span class="stat-k">Total Sinyal</span>  <span class="stat-v b" id="st-tot">0</span>
+        <span class="stat-k">✓ TP1 Hit</span>     <span class="stat-v g" id="st-tp1">0</span>
+        <span class="stat-k">✗ SL Hit</span>      <span class="stat-v r" id="st-sl">0</span>
+        <span class="stat-k">⚡ SL Cross</span>   <span class="stat-v a" id="st-slx">0</span>
+        <div class="stat-sep"></div>
+        <span class="stat-k">Gross Profit</span>  <span class="stat-v g" id="st-gp">0.00%</span>
+        <span class="stat-k">Gross Loss</span>    <span class="stat-v r" id="st-gl">0.00%</span>
+        <span class="stat-k">Profit Factor</span> <span class="stat-v" id="st-pf">—</span>
+        <div class="stat-sep"></div>
+        <span class="stat-k">SL Cross Maks</span> <span class="stat-v o" id="st-slxm">—</span>
+        <span class="stat-k">SL Cross Avg</span>  <span class="stat-v o" id="st-slxa">—</span>
+      </div>
+    </div>
+
+    <!-- POSISI -->
+    <div class="sb">
+      <div class="sb-ttl">Posisi Aktif</div>
+      <div class="pos-card">
+        <div class="pos-empty" id="posEmpty">Tidak ada posisi</div>
+        <div id="posDetail" style="display:none">
+          <div class="pos-hdr">
+            <div class="pos-badge" id="posBadge">LONG</div>
+            <div class="pos-pair" id="posPair"></div>
+          </div>
+          <div class="pos-kv"><span class="pos-k">Entry</span><span class="pos-v" id="posEntry"></span></div>
+          <div class="pos-kv"><span class="pos-k">TP1</span><span class="pos-v g" id="posTP1"></span></div>
+          <div class="pos-kv"><span class="pos-k">SL</span><span class="pos-v r" id="posSL"></span></div>
+          <div class="pos-kv"><span class="pos-k">Harga kini</span><span class="pos-v" id="posNow"></span></div>
+          <div class="pos-kv"><span class="pos-k">PnL</span><span class="pos-v" id="posPnl"></span></div>
+          <button class="btn btn-close-pos" onclick="manualClose()">✕ Tutup Manual</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOG -->
+    <div class="sb" style="padding-bottom:6px">
+      <div class="sb-ttl">Log Aktivitas</div>
+    </div>
+    <div class="log-wrap" id="logWrap"></div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════ SETTINGS MODAL ═══════════════════════════ -->
+<div class="modal-bg" id="modalBg" onclick="bgClick(event)">
+  <div class="modal">
+    <div class="modal-title">⚙ Pengaturan</div>
+
+    <!-- EMA & TP/SL -->
+    <div class="mgrp">
+      <div class="mgrp-hdr">Parameter Indikator</div>
+      <div class="mrow-2">
+        <div class="mrow">
+          <label>EMA Fast (default: 50)</label>
+          <input class="minput" id="cfgEmaFast" type="number" min="1" value="50" placeholder="50">
+        </div>
+        <div class="mrow">
+          <label>EMA Slow (default: 200)</label>
+          <input class="minput" id="cfgEmaSlow" type="number" min="1" value="200" placeholder="200">
+        </div>
+      </div>
+      <div class="mrow-2">
+        <div class="mrow">
+          <label>Take Profit 1 % (default: 0.5)</label>
+          <input class="minput" id="cfgTp1" type="number" min="0.01" step="0.1" value="0.5" placeholder="0.5">
+        </div>
+        <div class="mrow">
+          <label>Stop Loss % (default: 2.0)</label>
+          <input class="minput" id="cfgSl" type="number" min="0.01" step="0.1" value="2.0" placeholder="2.0">
+        </div>
+      </div>
+    </div>
+
+    <!-- Signal Codes -->
+    <div class="mgrp">
+      <div class="mgrp-hdr">Kode Instruksi BingX Signal Trading</div>
+      <div class="info-box">
+        Buka <a href="https://bingx.com/en/signalTrade" target="_blank">bingx.com → Signal Trading</a>,
+        buat <strong>4 Simple Instruction</strong> terpisah. Setiap instruksi akan memberi kamu kode unik.
+        Masukkan kode tersebut di sini.
+      </div>
+      <div class="mrow">
+        <label>🟢 Open Long — kode instruksi "Sinyal Beli"</label>
+        <input class="minput" id="cfgOL" placeholder="kode dari BingX...">
+      </div>
+      <div class="mrow">
+        <label>⬜ Close Long — kode instruksi "Tutup Beli"</label>
+        <input class="minput" id="cfgCL" placeholder="kode dari BingX...">
+      </div>
+      <div class="mrow">
+        <label>🔴 Open Short — kode instruksi "Sinyal Jual"</label>
+        <input class="minput" id="cfgOS" placeholder="kode dari BingX...">
+      </div>
+      <div class="mrow">
+        <label>⬜ Close Short — kode instruksi "Tutup Jual"</label>
+        <input class="minput" id="cfgCS" placeholder="kode dari BingX...">
+      </div>
+    </div>
+
+    <!-- Proxy -->
+    <div class="mgrp">
+      <div class="mgrp-hdr">URL Proxy (Cloudflare Worker)</div>
+      <div class="info-box">
+        Deploy file <code>worker.js</code> ke
+        <a href="https://workers.cloudflare.com" target="_blank">Cloudflare Workers</a> (gratis),
+        lalu masukkan URL-nya di sini. Proxy ini diperlukan agar browser bisa mengirim sinyal ke BingX
+        tanpa hambatan CORS.
+      </div>
+      <div class="mrow">
+        <label>Proxy Worker URL</label>
+        <input class="minput" id="cfgProxy" placeholder="https://nama-worker.workers.dev">
+      </div>
+    </div>
+
+    <div class="warn-box">
+      ⚠ <strong>Perhatian:</strong> Pastikan kamu sudah menguji sinyal secara manual sebelum mengaktifkan
+      Auto Trading. Website ini <strong>tidak bertanggung jawab</strong> atas keputusan trading.
+      Gunakan dengan bijak dan selalu kelola risiko.
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-cancel" onclick="closeSettings()">Batal</button>
+      <button class="btn btn-save"   onclick="saveSettings()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ SCRIPTS ══════════════════════════════════ -->
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+const S = {
+  candles:   [],
+  position:  null,  // { type:'long'|'short', entry, tp1, sl }
+  autoTrade: false,
+  ws:        null,
+  lastPrice: 0,
+  openPrice: 0,
+  // Running statistics
+  stats: { tot:0, tp1:0, sl:0, slx:0, slxMax:0, slxTot:0, gp:0, gl:0 },
+  // Price lines on chart
+  plines: { tp1:null, sl:null, entry:null },
+  // Config (loaded from localStorage)
+  cfg: loadCfg(),
+};
+
+function loadCfg() {
+  try { return JSON.parse(localStorage.getItem('bx_cfg') || '{}'); } catch { return {}; }
+}
+function saveCfg() { localStorage.setItem('bx_cfg', JSON.stringify(S.cfg)); }
+
+function getSymbol() { return document.getElementById('symSel').value; }
+function getTf()     { return document.getElementById('tfSel').value; }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHART INIT
+// ─────────────────────────────────────────────────────────────────────────────
+let chart, candleSeries, emaFastLine, emaSlowLine;
+
+function initChart() {
+  const el = document.getElementById('chart');
+  chart = LightweightCharts.createChart(el, {
+    layout: { background:{color:'#08090c'}, textColor:'#5a6480' },
+    grid:   { vertLines:{color:'rgba(255,255,255,.03)'}, horzLines:{color:'rgba(255,255,255,.03)'} },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    rightPriceScale: { borderColor:'rgba(255,255,255,.07)' },
+    timeScale: { borderColor:'rgba(255,255,255,.07)', timeVisible:true, secondsVisible:false },
+    width:  el.clientWidth,
+    height: el.clientHeight,
+  });
+
+  candleSeries = chart.addCandlestickSeries({
+    upColor:'#00e676', downColor:'#ff4d6d',
+    borderUpColor:'#00e676', borderDownColor:'#ff4d6d',
+    wickUpColor:'#00e676', wickDownColor:'#ff4d6d',
+  });
+
+  emaFastLine = chart.addLineSeries({ color:'#4080ff', lineWidth:1.5, priceLineVisible:false, lastValueVisible:false });
+  emaSlowLine = chart.addLineSeries({ color:'#ffb300', lineWidth:1.5, priceLineVisible:false, lastValueVisible:false });
+
+  window.addEventListener('resize', () => {
+    chart.applyOptions({ width:el.clientWidth, height:el.clientHeight });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EMA MATH
+// ─────────────────────────────────────────────────────────────────────────────
+function calcEMA(closes, period) {
+  if (closes.length < period) return [];
+  const k   = 2 / (period + 1);
+  const out  = new Array(closes.length).fill(null);
+  let seed = closes.slice(0, period).reduce((a,b)=>a+b,0) / period;
+  out[period - 1] = seed;
+  for (let i = period; i < closes.length; i++) {
+    seed = closes[i] * k + seed * (1 - k);
+    out[i] = +seed.toFixed(8);
+  }
+  return out;
+}
+
+function renderEMA() {
+  const { cfg, candles } = S;
+  const fast = cfg.emaFast || 50;
+  const slow = cfg.emaSlow || 200;
+  if (candles.length < slow + 2) return;
+
+  const closes = candles.map(c => c.close);
+  const ef = calcEMA(closes, fast);
+  const es = calcEMA(closes, slow);
+
+  emaFastLine.setData(candles.map((c,i) => ef[i] != null ? {time:c.time, value:ef[i]} : null).filter(Boolean));
+  emaSlowLine.setData(candles.map((c,i) => es[i] != null ? {time:c.time, value:es[i]} : null).filter(Boolean));
+  document.getElementById('legFast').textContent = 'EMA ' + fast;
+  document.getElementById('legSlow').textContent = 'EMA ' + slow;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRICE LINES (TP1 / SL / Entry)
+// ─────────────────────────────────────────────────────────────────────────────
+function createPriceLines(entry, tp1, sl) {
+  removePriceLines();
+  S.plines.entry = candleSeries.createPriceLine({ price:entry, color:'rgba(160,170,192,.55)', lineWidth:1, lineStyle:2, axisLabelVisible:true, title:'Entry' });
+  S.plines.tp1   = candleSeries.createPriceLine({ price:tp1,   color:'rgba(0,230,118,.55)',   lineWidth:2, lineStyle:2, axisLabelVisible:true, title:'TP1'   });
+  S.plines.sl    = candleSeries.createPriceLine({ price:sl,    color:'rgba(255,77,109,.55)',   lineWidth:1, lineStyle:2, axisLabelVisible:true, title:'SL'    });
+}
+
+function removePriceLines() {
+  ['entry','tp1','sl'].forEach(k => {
+    if (S.plines[k]) { try { candleSeries.removePriceLine(S.plines[k]); } catch(_){} S.plines[k] = null; }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOAD HISTORICAL DATA
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadHistory() {
+  const sym = getSymbol(), tf = getTf();
+  try {
+    const url = `https://open-api.bingx.com/openApi/swap/v2/quote/klines?symbol=${sym}&interval=${tf}&limit=500`;
+    const res  = await fetch(url);
+    const json = await res.json();
+    if (json.code !== 0) throw new Error(json.msg || 'API error');
+
+    S.candles = (json.data || []).map(d => ({
+      time:   Math.floor((d.time ?? d[0]) / 1000),
+      open:   parseFloat(d.open   ?? d[1]),
+      high:   parseFloat(d.high   ?? d[2]),
+      low:    parseFloat(d.low    ?? d[3]),
+      close:  parseFloat(d.close  ?? d[4]),
+      volume: parseFloat(d.volume ?? d[5]),
+    })).sort((a,b) => a.time - b.time);
+
+    candleSeries.setData(S.candles);
+    renderEMA();
+
+    if (S.candles.length) {
+      S.openPrice = S.candles[0].open;
+      updatePrice(S.candles[S.candles.length - 1].close);
+    }
+
+    log(`Data historis: ${S.candles.length} candle`, 'sys');
+  } catch(e) {
+    log('Gagal muat data: ' + e.message, 'err');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WEBSOCKET
+// ─────────────────────────────────────────────────────────────────────────────
+function connect() {
+  if (S.ws) { try { S.ws.close(); } catch(_){} S.ws = null; }
+  setConn(false, 'Menghubungkan…');
+
+  S.ws = new WebSocket('wss://open-api-ws.bingx.com/market');
+  S.ws.binaryType = 'arraybuffer';
+
+  S.ws.onopen = () => {
+    S.ws.send(JSON.stringify({
+      id: 'ecbot-' + Date.now(),
+      reqType: 'sub',
+      dataType: `${getSymbol()}@kline_${getTf()}`,
+    }));
+    setConn(true, 'Terhubung · ' + getSymbol());
+  };
+
+  S.ws.onmessage = async (ev) => {
+    try {
+      let txt;
+      if (ev.data instanceof ArrayBuffer) {
+        txt = pako.inflate(new Uint8Array(ev.data), { to:'string' });
+      } else { txt = ev.data; }
+
+      if (txt === 'Ping') { S.ws.send('Pong'); return; }
+      let msg; try { msg = JSON.parse(txt); } catch { return; }
+      if (msg.ping) { S.ws.send(JSON.stringify({ pong:msg.ping })); return; }
+
+      if (msg.data && msg.dataType && msg.dataType.includes('kline')) {
+        onKline(msg.data);
+      }
+    } catch(_) {}
+  };
+
+  S.ws.onclose = () => { setConn(false, 'Terputus — mencoba ulang…'); setTimeout(connect, 4000); };
+  S.ws.onerror = () => setConn(false, 'Error koneksi');
+}
+
+function onKline(d) {
+  const candle = {
+    time:   Math.floor(d.t / 1000),
+    open:   parseFloat(d.o),
+    high:   parseFloat(d.h),
+    low:    parseFloat(d.l),
+    close:  parseFloat(d.c),
+    volume: parseFloat(d.v),
+  };
+
+  updatePrice(candle.close);
+  candleSeries.update(candle);
+
+  if (S.candles.length === 0) { S.candles.push(candle); return; }
+
+  const last = S.candles[S.candles.length - 1];
+
+  if (candle.time > last.time) {
+    // ── Candle baru: sebelumnya sudah SELESAI → jalankan logika indikator ──
+    runSignalLogic(S.candles);
+    S.candles.push(candle);
+    renderEMA();
+  } else {
+    // ── Update candle yang sedang berjalan ──
+    S.candles[S.candles.length - 1] = candle;
+    // Cek TP/SL secara real-time (intra-candle)
+    if (S.position) checkTPSLRealtime(candle);
+  }
+
+  renderPosLive(candle.close);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ╔═══════════════════════════════════════════════════════════════════════════╗
+// ║  LOGIKA INDIKATOR — diterjemahkan dari Pine Script                       ║
+// ║                                                                           ║
+// ║  Dipanggil sekali per candle yang SELESAI.                                ║
+// ║  Urutan: (1) cek TP/SL posisi aktif → (2) buka posisi baru               ║
+// ╚═══════════════════════════════════════════════════════════════════════════╝
+function runSignalLogic(candles) {
+  const n    = candles.length;
+  const cfg  = S.cfg;
+  const fast = cfg.emaFast || 50;
+  const slow = cfg.emaSlow || 200;
+
+  if (n < slow + 2) return; // belum cukup data
+
+  const closes = candles.map(c => c.close);
+  const ef = calcEMA(closes, fast);
+  const es = calcEMA(closes, slow);
+
+  const i  = n - 1; // candle terakhir (baru selesai)
+  const i1 = i - 1;
+
+  if (ef[i] === null || es[i] === null || ef[i1] === null || es[i1] === null) return;
+
+  // ── Crossover / Crossunder (Pine Script: ta.crossover / ta.crossunder) ──
+  const buySig  = ef[i1] <= es[i1] && ef[i] > es[i];  // EMA Fast melintasi ke atas
+  const sellSig = ef[i1] >= es[i1] && ef[i] < es[i];  // EMA Fast melintasi ke bawah
+
+  const candle = candles[i];
+  const H = candle.high;
+  const L = candle.low;
+  const C = candle.close;
+  const T = candle.time;
+
+  const tp1Pct = (cfg.tp1Pct || 0.5)  / 100;
+  const slPct  = (cfg.slPct  || 2.0)  / 100;
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // STEP 1: Cek outcome posisi aktif  (sesuai urutan Pine Script)
+  // ──────────────────────────────────────────────────────────────────────────
+  if (S.position) {
+    const pos = S.position;
+
+    if (pos.type === 'long') {
+      const lTp1 = H >= pos.tp1;
+      const lSl  = L <= pos.sl && !lTp1;
+      const lSlx = sellSig && !lTp1 && !lSl;     // SL Cross: sell saat masih Long
+
+      if (lTp1) {
+        const gain = tp1Pct * 100;
+        log(`✅ LONG TP1 ✓ +${gain.toFixed(2)}%`, 'close');
+        addMarker(T, 'aboveBar', '#00C853', 'arrowDown', 'TP1');
+        updateStats('tp1', gain);
+        closePosition();
+        if (S.autoTrade) execBingX('CLOSE_LONG');
+      } else if (lSl) {
+        const loss = slPct * 100;
+        log(`🛑 LONG SL ✗ -${loss.toFixed(2)}%`, 'err');
+        addMarker(T, 'belowBar', '#C62828', 'arrowUp', 'SL');
+        updateStats('sl', loss);
+        closePosition();
+        if (S.autoTrade) execBingX('CLOSE_LONG');
+      } else if (lSlx) {
+        const loss = Math.abs((C - pos.entry) / pos.entry * 100);
+        log(`⚡ LONG SL Cross -${loss.toFixed(2)}%`, 'close');
+        addMarker(T, 'aboveBar', '#E65100', 'arrowDown', 'SLX');
+        updateStats('slx', loss);
+        closePosition();
+        if (S.autoTrade) execBingX('CLOSE_LONG');
+      }
+    }
+
+    else if (pos.type === 'short') {
+      const sTp1 = L <= pos.tp1;
+      const sSl  = H >= pos.sl && !sTp1;
+      const sSlx = buySig && !sTp1 && !sSl;       // SL Cross: buy saat masih Short
+
+      if (sTp1) {
+        const gain = tp1Pct * 100;
+        log(`✅ SHORT TP1 ✓ +${gain.toFixed(2)}%`, 'close');
+        addMarker(T, 'belowBar', '#00C853', 'arrowUp', 'TP1');
+        updateStats('tp1', gain);
+        closePosition();
+        if (S.autoTrade) execBingX('CLOSE_SHORT');
+      } else if (sSl) {
+        const loss = slPct * 100;
+        log(`🛑 SHORT SL ✗ -${loss.toFixed(2)}%`, 'err');
+        addMarker(T, 'aboveBar', '#C62828', 'arrowDown', 'SL');
+        updateStats('sl', loss);
+        closePosition();
+        if (S.autoTrade) execBingX('CLOSE_SHORT');
+      } else if (sSlx) {
+        const loss = Math.abs((C - pos.entry) / pos.entry * 100);
+        log(`⚡ SHORT SL Cross -${loss.toFixed(2)}%`, 'close');
+        addMarker(T, 'belowBar', '#E65100', 'arrowUp', 'SLX');
+        updateStats('slx', loss);
+        closePosition();
+        if (S.autoTrade) execBingX('CLOSE_SHORT');
+      }
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // STEP 2: Buka posisi baru
+  // ──────────────────────────────────────────────────────────────────────────
+  if (buySig) {
+    const tp1Lvl = C * (1 + tp1Pct);
+    const slLvl  = C * (1 - slPct);
+    log(`🟢 BUY SIGNAL @ ${fmt(C)} | TP1:${fmt(tp1Lvl)} SL:${fmt(slLvl)}`, 'buy');
+    addMarker(T, 'belowBar', '#1B5E20', 'arrowUp', 'BUY');
+    setPills('buy');
+    S.stats.tot++;
+    openPosition('long', C, tp1Lvl, slLvl);
+    if (S.autoTrade) execBingX('OPEN_LONG');
+  }
+
+  if (sellSig) {
+    const tp1Lvl = C * (1 - tp1Pct);
+    const slLvl  = C * (1 + slPct);
+    log(`🔴 SELL SIGNAL @ ${fmt(C)} | TP1:${fmt(tp1Lvl)} SL:${fmt(slLvl)}`, 'sell');
+    addMarker(T, 'aboveBar', '#B71C1C', 'arrowDown', 'SELL');
+    setPills('sell');
+    S.stats.tot++;
+    openPosition('short', C, tp1Lvl, slLvl);
+    if (S.autoTrade) execBingX('OPEN_SHORT');
+  }
+
+  if (!buySig && !sellSig) setPills(null);
+  updateStatsUI();
+  renderPosUI(S.lastPrice);
+}
+
+// Real-time TP/SL check selama candle berjalan
+function checkTPSLRealtime(candle) {
+  if (!S.position) return;
+  const pos = S.position;
+  const H = candle.high, L = candle.low, C = candle.close;
+  const cfg = S.cfg;
+  const tp1Pct = (cfg.tp1Pct || 0.5) / 100;
+  const slPct  = (cfg.slPct  || 2.0) / 100;
+
+  if (pos.type === 'long') {
+    if (H >= pos.tp1) {
+      const gain = tp1Pct * 100;
+      log(`✅ LONG TP1 realtime +${gain.toFixed(2)}%`, 'close');
+      updateStats('tp1', gain);
+      closePosition();
+      if (S.autoTrade) execBingX('CLOSE_LONG');
+    } else if (L <= pos.sl) {
+      const loss = slPct * 100;
+      log(`🛑 LONG SL realtime -${loss.toFixed(2)}%`, 'err');
+      updateStats('sl', loss);
+      closePosition();
+      if (S.autoTrade) execBingX('CLOSE_LONG');
+    }
+  } else {
+    if (L <= pos.tp1) {
+      const gain = tp1Pct * 100;
+      log(`✅ SHORT TP1 realtime +${gain.toFixed(2)}%`, 'close');
+      updateStats('tp1', gain);
+      closePosition();
+      if (S.autoTrade) execBingX('CLOSE_SHORT');
+    } else if (H >= pos.sl) {
+      const loss = slPct * 100;
+      log(`🛑 SHORT SL realtime -${loss.toFixed(2)}%`, 'err');
+      updateStats('sl', loss);
+      closePosition();
+      if (S.autoTrade) execBingX('CLOSE_SHORT');
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POSITION HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+function openPosition(type, entry, tp1, sl) {
+  S.position = { type, entry, tp1, sl };
+  createPriceLines(entry, tp1, sl);
+}
+
+function closePosition() {
+  S.position = null;
+  removePriceLines();
+  renderPosUI(S.lastPrice);
+}
+
+function manualClose() {
+  if (!S.position) return;
+  const type = S.position.type === 'long' ? 'CLOSE_LONG' : 'CLOSE_SHORT';
+  log('🤚 Tutup manual', 'sys');
+  if (S.autoTrade) execBingX(type);
+  closePosition();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BINGX SIGNAL EXECUTION
+// ─────────────────────────────────────────────────────────────────────────────
+async function execBingX(type) {
+  const c = S.cfg;
+  const codeMap = { OPEN_LONG:c.ol, CLOSE_LONG:c.cl, OPEN_SHORT:c.os, CLOSE_SHORT:c.cs };
+  const code  = codeMap[type];
+  const proxy = c.proxy;
+
+  if (!code)  { log(`⚠ Kode ${type} belum diisi di Pengaturan`, 'err'); return; }
+  if (!proxy) { log('⚠ Proxy URL belum diisi di Pengaturan', 'err'); return; }
+
+  try {
+    const res = await fetch(proxy, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    if (res.ok) {
+      log(`✅ ${type} → BingX OK`, 'ok');
+    } else {
+      const t = await res.text();
+      log(`❌ ${type} gagal: ${res.status} ${t}`, 'err');
+    }
+  } catch(e) {
+    log(`❌ Jaringan error: ${e.message}`, 'err');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATISTICS
+// ─────────────────────────────────────────────────────────────────────────────
+function updateStats(outcome, pct) {
+  const s = S.stats;
+  if (outcome === 'tp1')      { s.tp1++; s.gp += pct; }
+  else if (outcome === 'sl')  { s.sl++;  s.gl += pct; }
+  else if (outcome === 'slx') { s.slx++; s.gl += pct; s.slxTot += pct; if(pct > s.slxMax) s.slxMax = pct; }
+  updateStatsUI();
+}
+
+function updateStatsUI() {
+  const s = S.stats;
+  $('st-tot').textContent = s.tot;
+  $('st-tp1').textContent = s.tp1;
+  $('st-sl').textContent  = s.sl;
+  $('st-slx').textContent = s.slx;
+  $('st-gp').textContent  = s.gp.toFixed(2) + '%';
+  $('st-gl').textContent  = s.gl.toFixed(2) + '%';
+
+  const pf = s.gl > 0 ? (s.gp / s.gl) : null;
+  const pfEl = $('st-pf');
+  pfEl.textContent = pf === null ? '∞' : pf.toFixed(2);
+  pfEl.className = 'stat-v ' + (pf === null || pf >= 1 ? 'g' : 'r');
+
+  $('st-slxm').textContent = s.slx > 0 ? s.slxMax.toFixed(2) + '%' : '—';
+  $('st-slxa').textContent = s.slx > 0 ? (s.slxTot / s.slx).toFixed(2) + '%' : '—';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHART MARKERS
+// ─────────────────────────────────────────────────────────────────────────────
+let _markers = [];
+function addMarker(time, pos, color, shape, text) {
+  _markers.push({ time, position:pos, color, shape, text });
+  if (_markers.length > 100) _markers = _markers.slice(-100);
+  candleSeries.setMarkers(_markers);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+function $(id) { return document.getElementById(id); }
+function fmt(n) { return n?.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:4}) || '—'; }
+
+function updatePrice(p) {
+  S.lastPrice = p;
+  const el = $('priceEl'), chg = $('chgEl');
+  el.textContent = fmt(p);
+  if (S.openPrice) {
+    const pct = ((p - S.openPrice) / S.openPrice * 100).toFixed(2);
+    const dir = p >= S.openPrice ? 'up' : 'dn';
+    el.className = 'price-main ' + dir;
+    chg.textContent = (p >= S.openPrice ? '+' : '') + pct + '%';
+    chg.className = 'price-chg ' + dir;
+  }
+}
+
+function setConn(live, text) {
+  $('dot').className = 'conn-dot' + (live ? ' live' : '');
+  $('connText').textContent = text;
+}
+
+function setPills(signal) {
+  const clear = id => {
+    $(id).className = 'sig-pill';
+    $(id).textContent = 'WAIT';
+  };
+  ['pill-buy','pill-cbuy','pill-sell','pill-csell'].forEach(clear);
+  ['row-buy','row-cbuy','row-sell','row-csell'].forEach(id => {
+    $(id).className = 'sig-row';
+  });
+  if (!signal) return;
+  if (signal === 'buy') {
+    $('pill-buy').className = 'sig-pill on-buy'; $('pill-buy').textContent = 'AKTIF';
+    $('row-buy').className = 'sig-row active-buy';
+  } else if (signal === 'sell') {
+    $('pill-sell').className = 'sig-pill on-sell'; $('pill-sell').textContent = 'AKTIF';
+    $('row-sell').className = 'sig-row active-sell';
+  }
+}
+
+function renderPosUI(p) {
+  const empty  = $('posEmpty');
+  const detail = $('posDetail');
+  if (!S.position) { empty.style.display=''; detail.style.display='none'; return; }
+  empty.style.display = 'none'; detail.style.display = '';
+  const pos = S.position;
+  $('posBadge').textContent = pos.type.toUpperCase();
+  $('posBadge').className = 'pos-badge ' + pos.type;
+  $('posPair').textContent  = getSymbol();
+  $('posEntry').textContent = fmt(pos.entry);
+  $('posTP1').textContent   = fmt(pos.tp1);
+  $('posSL').textContent    = fmt(pos.sl);
+  renderPosLive(p);
+}
+
+function renderPosLive(p) {
+  if (!S.position) return;
+  const pos = S.position;
+  const pnl = pos.type === 'long' ? p - pos.entry : pos.entry - p;
+  const pnlPct = (pnl / pos.entry * 100).toFixed(2);
+  const el = $('posPnl');
+  el.textContent = `${pnl >= 0 ? '+' : ''}${pnl.toFixed(4)} USDT (${pnl >= 0 ? '+' : ''}${pnlPct}%)`;
+  el.className = 'pos-v ' + (pnl >= 0 ? 'profit' : 'loss');
+  $('posNow').textContent = fmt(p);
+}
+
+function log(msg, cls='sys') {
+  const wrap = $('logWrap');
+  const d = new Date();
+  const t = [d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':');
+  const div = document.createElement('div');
+  div.className = 'log-entry';
+  div.innerHTML = `<span class="log-t">${t}</span><span class="log-m ${cls}">${msg}</span>`;
+  wrap.insertBefore(div, wrap.firstChild);
+  if (wrap.children.length > 100) wrap.removeChild(wrap.lastChild);
+}
+
+function toggleAT() {
+  S.autoTrade = $('atToggle').checked;
+  $('atSub').textContent = S.autoTrade
+    ? 'Aktif — sinyal akan dieksekusi ke BingX'
+    : 'Nonaktif — sinyal hanya ditampilkan';
+  log(S.autoTrade ? '🤖 Auto Trading AKTIF' : '⏸ Auto Trading NONAKTIF');
+}
+
+// SETTINGS MODAL
+function openSettings() {
+  const c = S.cfg;
+  $('cfgEmaFast').value = c.emaFast || 50;
+  $('cfgEmaSlow').value = c.emaSlow || 200;
+  $('cfgTp1').value     = c.tp1Pct  || 0.5;
+  $('cfgSl').value      = c.slPct   || 2.0;
+  $('cfgOL').value      = c.ol      || '';
+  $('cfgCL').value      = c.cl      || '';
+  $('cfgOS').value      = c.os      || '';
+  $('cfgCS').value      = c.cs      || '';
+  $('cfgProxy').value   = c.proxy   || '';
+  $('modalBg').classList.add('open');
+}
+function closeSettings() { $('modalBg').classList.remove('open'); }
+function bgClick(e) { if (e.target === $('modalBg')) closeSettings(); }
+
+function saveSettings() {
+  S.cfg = {
+    emaFast: parseInt($('cfgEmaFast').value)  || 50,
+    emaSlow: parseInt($('cfgEmaSlow').value)  || 200,
+    tp1Pct:  parseFloat($('cfgTp1').value)    || 0.5,
+    slPct:   parseFloat($('cfgSl').value)     || 2.0,
+    ol:    $('cfgOL').value.trim(),
+    cl:    $('cfgCL').value.trim(),
+    os:    $('cfgOS').value.trim(),
+    cs:    $('cfgCS').value.trim(),
+    proxy: $('cfgProxy').value.trim(),
+  };
+  saveCfg();
+  closeSettings();
+  log('✅ Pengaturan tersimpan', 'ok');
+  // Reload untuk terapkan EMA baru
+  resetAndReload();
+}
+
+async function resetAndReload() {
+  S.candles = []; S.position = null; S.openPrice = 0; _markers = [];
+  candleSeries.setData([]); candleSeries.setMarkers([]);
+  emaFastLine.setData([]); emaSlowLine.setData([]);
+  removePriceLines(); renderPosUI(0); updateStatsUI();
+  await loadHistory();
+  connect();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOOT
+// ─────────────────────────────────────────────────────────────────────────────
+initChart();
+loadHistory().then(connect);
+log('🚀 EMA Cross Bot siap', 'sys');
+</script>
+</body>
+</html>
