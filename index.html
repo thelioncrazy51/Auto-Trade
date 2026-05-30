@@ -618,7 +618,7 @@ async function loadHistory() {
   const sym = getSymbol(), tf = getTf();
   try {
     // Binance API: CORS terbuka, bisa diakses langsung dari browser tanpa proxy
-    const url = `https://api.binance.com/api/v3/klines?symbol=${bnSym(sym)}&interval=${tf}&limit=500`;
+    const url = `https://api.binance.com/api/v3/klines?symbol=${bnSym(sym)}&interval=${tf}&limit=1000`;
     const res  = await fetch(url);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const json = await res.json();
@@ -635,6 +635,7 @@ async function loadHistory() {
 
     candleSeries.setData(S.candles);
     renderEMA();
+    chart.timeScale().fitContent(); // tampilkan semua candle
 
     if (S.candles.length) {
       S.openPrice = S.candles[0].open;
@@ -642,8 +643,58 @@ async function loadHistory() {
     }
 
     log(`Data historis: ${S.candles.length} candle (via Binance)`, 'sys');
+    scanHistoricalSignals(); // scan & tandai sinyal di data historis
   } catch(e) {
     log('Gagal muat data: ' + e.message, 'err');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCAN DATA HISTORIS — tandai semua crossover EMA di chart (tampilkan saja)
+// Dipanggil sekali setelah loadHistory selesai.
+// Statistik TIDAK diupdate (hanya untuk referensi visual).
+// ─────────────────────────────────────────────────────────────────────────────
+function scanHistoricalSignals() {
+  const candles = S.candles;
+  const fast    = S.cfg.emaFast || 50;
+  const slow    = S.cfg.emaSlow || 200;
+
+  if (candles.length < slow + 2) {
+    log(`⚠ Data kurang (${candles.length} candle), butuh minimal ${slow + 2} untuk EMA ${slow}`, 'err');
+    return;
+  }
+
+  const closes = candles.map(c => c.close);
+  const ef = calcEMA(closes, fast);
+  const es = calcEMA(closes, slow);
+
+  _markers = [];
+  let buyCount = 0, sellCount = 0;
+
+  // Scan dari candle ke-slow hingga candle sebelum terakhir
+  // (candle terakhir = live, belum selesai)
+  for (let i = slow; i < candles.length - 1; i++) {
+    const i1 = i - 1;
+    if (ef[i1] == null || es[i1] == null || ef[i] == null || es[i] == null) continue;
+
+    const buySig  = ef[i1] <= es[i1] && ef[i] > es[i];
+    const sellSig = ef[i1] >= es[i1] && ef[i] < es[i];
+
+    if (buySig) {
+      _markers.push({ time: candles[i].time, position:'belowBar', color:'#1B5E20', shape:'arrowUp',   text:'BUY' });
+      buyCount++;
+    }
+    if (sellSig) {
+      _markers.push({ time: candles[i].time, position:'aboveBar', color:'#B71C1C', shape:'arrowDown', text:'SELL' });
+      sellCount++;
+    }
+  }
+
+  if (_markers.length > 0) {
+    _markersApi.setMarkers(_markers);
+    log(`📊 Historis: ${buyCount} BUY + ${sellCount} SELL ditemukan`, 'sys');
+  } else {
+    log('📊 Tidak ada crossover EMA dalam rentang historis ini', 'sys');
   }
 }
 
@@ -1102,6 +1153,7 @@ async function resetAndReload() {
   removePriceLines(); renderPosUI(0); updateStatsUI();
   await loadHistory();
   connect();
+  // scanHistoricalSignals sudah dipanggil di dalam loadHistory()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
