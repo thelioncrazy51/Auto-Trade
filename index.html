@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>EMA Cross Auto Trader — BingX</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -472,10 +473,16 @@ select:focus { border-color:var(--blue); }
 </div>
 
 <!-- ═══════════════════════ SCRIPTS ══════════════════════════════════ -->
-<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
 <script>
 'use strict';
+
+// ── Cek library tersedia ─────────────────────────────────────────────────────
+if (typeof LightweightCharts === 'undefined' || typeof LightweightCharts.createChart !== 'function') {
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#08090c;color:#ff4d6d;font-family:monospace;font-size:14px;text-align:center;padding:20px">❌ Gagal memuat library chart.<br><br>Pastikan internet aktif, lalu tekan Ctrl+F5 untuk refresh.</div>';
+  throw new Error('LightweightCharts tidak tersedia');
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STATE
