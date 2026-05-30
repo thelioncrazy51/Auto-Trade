@@ -473,8 +473,7 @@ select:focus { border-color:var(--blue); }
 </div>
 
 <!-- ═══════════════════════ SCRIPTS ══════════════════════════════════ -->
-<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 <script>
 'use strict';
 
@@ -511,6 +510,14 @@ function getSymbol() { return document.getElementById('symSel').value; }
 function getTf()     { return document.getElementById('tfSel').value; }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// BINANCE SYMBOL HELPERS
+// Binance tidak pakai CORS-block untuk data publik, sehingga bisa diakses
+// langsung dari browser tanpa proxy.
+// ─────────────────────────────────────────────────────────────────────────────
+function bnSym(s)    { return s.replace('-',''); }             // BTC-USDT → BTCUSDT
+function bnStream(s) { return s.replace('-','').toLowerCase(); } // BTC-USDT → btcusdt
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CHART INIT
 // ─────────────────────────────────────────────────────────────────────────────
 let chart, candleSeries, emaFastLine, emaSlowLine;
@@ -527,14 +534,29 @@ function initChart() {
     height: el.clientHeight,
   });
 
-  candleSeries = chart.addCandlestickSeries({
+  const candleOpts = {
     upColor:'#00e676', downColor:'#ff4d6d',
     borderUpColor:'#00e676', borderDownColor:'#ff4d6d',
     wickUpColor:'#00e676', wickDownColor:'#ff4d6d',
-  });
+  };
+  const fastLineOpts = { color:'#4080ff', lineWidth:1.5, priceLineVisible:false, lastValueVisible:false };
+  const slowLineOpts = { color:'#ffb300', lineWidth:1.5, priceLineVisible:false, lastValueVisible:false };
 
-  emaFastLine = chart.addLineSeries({ color:'#4080ff', lineWidth:1.5, priceLineVisible:false, lastValueVisible:false });
-  emaSlowLine = chart.addLineSeries({ color:'#ffb300', lineWidth:1.5, priceLineVisible:false, lastValueVisible:false });
+  // ── Kompatibel lightweight-charts v3/v4 (addCandlestickSeries)
+  //    maupun v5+ (addSeries + CandlestickSeries)
+  if (typeof chart.addCandlestickSeries === 'function') {
+    // v3 / v4
+    candleSeries = chart.addCandlestickSeries(candleOpts);
+    emaFastLine  = chart.addLineSeries(fastLineOpts);
+    emaSlowLine  = chart.addLineSeries(slowLineOpts);
+    _markersApi  = { setMarkers: (m) => candleSeries.setMarkers(m) };
+  } else {
+    // v5+
+    candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, candleOpts);
+    emaFastLine  = chart.addSeries(LightweightCharts.LineSeries, fastLineOpts);
+    emaSlowLine  = chart.addSeries(LightweightCharts.LineSeries, slowLineOpts);
+    _markersApi  = LightweightCharts.createSeriesMarkers(candleSeries, []);
+  }
 
   window.addEventListener('resize', () => {
     chart.applyOptions({ width:el.clientWidth, height:el.clientHeight });
@@ -595,18 +617,20 @@ function removePriceLines() {
 async function loadHistory() {
   const sym = getSymbol(), tf = getTf();
   try {
-    const url = `https://open-api.bingx.com/openApi/swap/v2/quote/klines?symbol=${sym}&interval=${tf}&limit=500`;
+    // Binance API: CORS terbuka, bisa diakses langsung dari browser tanpa proxy
+    const url = `https://api.binance.com/api/v3/klines?symbol=${bnSym(sym)}&interval=${tf}&limit=500`;
     const res  = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const json = await res.json();
-    if (json.code !== 0) throw new Error(json.msg || 'API error');
 
-    S.candles = (json.data || []).map(d => ({
-      time:   Math.floor((d.time ?? d[0]) / 1000),
-      open:   parseFloat(d.open   ?? d[1]),
-      high:   parseFloat(d.high   ?? d[2]),
-      low:    parseFloat(d.low    ?? d[3]),
-      close:  parseFloat(d.close  ?? d[4]),
-      volume: parseFloat(d.volume ?? d[5]),
+    // Format Binance: [openTime, open, high, low, close, volume, closeTime, ...]
+    S.candles = json.map(d => ({
+      time:   Math.floor(d[0] / 1000),
+      open:   parseFloat(d[1]),
+      high:   parseFloat(d[2]),
+      low:    parseFloat(d[3]),
+      close:  parseFloat(d[4]),
+      volume: parseFloat(d[5]),
     })).sort((a,b) => a.time - b.time);
 
     candleSeries.setData(S.candles);
@@ -617,7 +641,7 @@ async function loadHistory() {
       updatePrice(S.candles[S.candles.length - 1].close);
     }
 
-    log(`Data historis: ${S.candles.length} candle`, 'sys');
+    log(`Data historis: ${S.candles.length} candle (via Binance)`, 'sys');
   } catch(e) {
     log('Gagal muat data: ' + e.message, 'err');
   }
@@ -630,32 +654,19 @@ function connect() {
   if (S.ws) { try { S.ws.close(); } catch(_){} S.ws = null; }
   setConn(false, 'Menghubungkan…');
 
-  S.ws = new WebSocket('wss://open-api-ws.bingx.com/market');
-  S.ws.binaryType = 'arraybuffer';
+  const sym = getSymbol(), tf = getTf();
+  // Binance WebSocket: data JSON teks biasa, tidak perlu dekompresi
+  S.ws = new WebSocket(`wss://stream.binance.com:9443/ws/${bnStream(sym)}@kline_${tf}`);
 
   S.ws.onopen = () => {
-    S.ws.send(JSON.stringify({
-      id: 'ecbot-' + Date.now(),
-      reqType: 'sub',
-      dataType: `${getSymbol()}@kline_${getTf()}`,
-    }));
-    setConn(true, 'Terhubung · ' + getSymbol());
+    setConn(true, 'Live · ' + sym + ' via Binance');
   };
 
-  S.ws.onmessage = async (ev) => {
+  S.ws.onmessage = (ev) => {
     try {
-      let txt;
-      if (ev.data instanceof ArrayBuffer) {
-        txt = pako.inflate(new Uint8Array(ev.data), { to:'string' });
-      } else { txt = ev.data; }
-
-      if (txt === 'Ping') { S.ws.send('Pong'); return; }
-      let msg; try { msg = JSON.parse(txt); } catch { return; }
-      if (msg.ping) { S.ws.send(JSON.stringify({ pong:msg.ping })); return; }
-
-      if (msg.data && msg.dataType && msg.dataType.includes('kline')) {
-        onKline(msg.data);
-      }
+      const msg = JSON.parse(ev.data);
+      // Format Binance: { e:'kline', k:{ t, o, h, l, c, v, x, ... } }
+      if (msg.e === 'kline' && msg.k) onKline(msg.k);
     } catch(_) {}
   };
 
@@ -663,14 +674,15 @@ function connect() {
   S.ws.onerror = () => setConn(false, 'Error koneksi');
 }
 
-function onKline(d) {
+function onKline(k) {
+  // k = Binance kline object: { t:openTime, o, h, l, c, v, x:isClosed, ... }
   const candle = {
-    time:   Math.floor(d.t / 1000),
-    open:   parseFloat(d.o),
-    high:   parseFloat(d.h),
-    low:    parseFloat(d.l),
-    close:  parseFloat(d.c),
-    volume: parseFloat(d.v),
+    time:   Math.floor(k.t / 1000),
+    open:   parseFloat(k.o),
+    high:   parseFloat(k.h),
+    low:    parseFloat(k.l),
+    close:  parseFloat(k.c),
+    volume: parseFloat(k.v),
   };
 
   updatePrice(candle.close);
@@ -681,8 +693,7 @@ function onKline(d) {
   const last = S.candles[S.candles.length - 1];
 
   if (candle.time > last.time) {
-    // ── Candle baru: sebelumnya sudah SELESAI → jalankan logika indikator ──
-    runSignalLogic(S.candles);
+    // ── Candle baru muncul: candle sebelumnya sudah selesai ──
     S.candles.push(candle);
     renderEMA();
   } else {
@@ -690,6 +701,8 @@ function onKline(d) {
     S.candles[S.candles.length - 1] = candle;
     // Cek TP/SL secara real-time (intra-candle)
     if (S.position) checkTPSLRealtime(candle);
+    // Binance: k.x = true berarti candle tepat selesai → jalankan sinyal
+    if (k.x) { runSignalLogic(S.candles); renderEMA(); }
   }
 
   renderPosLive(candle.close);
@@ -951,10 +964,11 @@ function updateStatsUI() {
 // CHART MARKERS
 // ─────────────────────────────────────────────────────────────────────────────
 let _markers = [];
+let _markersApi  = null; // kompatibilitas v3/v4 dan v5+
 function addMarker(time, pos, color, shape, text) {
   _markers.push({ time, position:pos, color, shape, text });
   if (_markers.length > 100) _markers = _markers.slice(-100);
-  candleSeries.setMarkers(_markers);
+  _markersApi.setMarkers(_markers);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1083,7 +1097,7 @@ function saveSettings() {
 
 async function resetAndReload() {
   S.candles = []; S.position = null; S.openPrice = 0; _markers = [];
-  candleSeries.setData([]); candleSeries.setMarkers([]);
+  candleSeries.setData([]); _markersApi.setMarkers([]);
   emaFastLine.setData([]); emaSlowLine.setData([]);
   removePriceLines(); renderPosUI(0); updateStatsUI();
   await loadHistory();
